@@ -1,9 +1,6 @@
 import enum
 import time
-import random
-from dataclasses import dataclass, field
-from typing import List, Deque
-from collections import deque
+from dataclasses import dataclass
 
 class Direction(enum.Enum):
     NORTH = "North"
@@ -16,6 +13,11 @@ class LightColor(enum.Enum):
     YELLOW = "Yellow"
     GREEN = "Green"
 
+class VehicleStatus(enum.Enum):
+    WAITING = "Waiting"
+    CROSSING = "Crossing"
+    COMPLETED = "Completed"
+
 @dataclass
 class Vehicle:
     id: str
@@ -23,7 +25,11 @@ class Vehicle:
     arrival_time: float
     start_waiting_time: float = 0.0
     end_waiting_time: float = 0.0
-    
+    status: VehicleStatus = VehicleStatus.WAITING
+    position: float = 0.0 # 0.0 is stop line, >0 is crossing, <0 is in queue (visual logic will handle queue)
+    speed: float = 5.0 # pixels per update tick? Or relative units.
+    is_emergency: bool = False
+
     @property
     def wait_time(self):
         if self.end_waiting_time > 0:

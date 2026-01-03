@@ -2,7 +2,7 @@ import threading
 import time
 import random
 from collections import deque
-from .models import Direction, LightColor, Vehicle, TrafficStats
+from .models import Direction, LightColor, Vehicle, VehicleStatus, TrafficStats
 
 class ThreadedTrafficLight(threading.Thread):
     def __init__(self, direction: Direction, stats: TrafficStats):
@@ -10,47 +10,73 @@ class ThreadedTrafficLight(threading.Thread):
         self.direction = direction
         self.stats = stats
         self.color = LightColor.RED
-        self.vehicles = deque()
+        self.vehicles = [] 
         self.running = True
         self.lock = threading.Lock()
-        self.condition = threading.Condition(self.lock)
+        
+        self.stop_line_pos = 0.0
+        self.speed = 8.0 
+        self.car_gap = 40.0 
+        self.spawn_pos = -400.0 
+        self.end_pos = 400.0 
 
     def add_vehicle(self, vehicle: Vehicle):
         with self.lock:
-            vehicle.start_waiting_time = time.time()
+            vehicle.position = self.spawn_pos
+            vehicle.arrival_time = time.time()
             self.vehicles.append(vehicle)
 
     def set_color(self, color: LightColor):
         with self.lock:
             self.color = color
-            self.condition.notify_all()
+
+    def has_emergency_waiting(self):
+        with self.lock:
+            for v in self.vehicles:
+                if v.is_emergency and v.status != VehicleStatus.COMPLETED:
+                    # If it's already past the stop line significantly, maybe we don't need to hold green?
+                    # But safer to hold until completed or far enough.
+                    if v.position < self.end_pos: 
+                        return True
+        return False
 
     def run(self):
         while self.running:
             with self.lock:
-                while self.color != LightColor.GREEN and self.running:
-                    # Wait until green or stopped
-                    self.condition.wait(timeout=0.1)
+                active = []
+                last_vehicle_pos = self.end_pos + 1000 
                 
-                if not self.running:
-                    break
+                for v in self.vehicles:
+                    limit = last_vehicle_pos - self.car_gap
+                    
+                    if v.position < 0 and self.color != LightColor.GREEN:
+                        # Allow emergency vehicles to creep closer or run red? No, safety first -> force Controller to Green.
+                        limit = min(limit, 0.0 - 10)
+                    
+                    # Logic: Emergency vehicles might move faster?
+                    current_speed = self.speed * 1.5 if v.is_emergency else self.speed
+                    
+                    next_pos = v.position + current_speed
+                    
+                    if next_pos > limit:
+                        next_pos = limit
+                    
+                    v.position = next_pos
+                    
+                    if v.position > self.end_pos:
+                        v.status = VehicleStatus.COMPLETED
+                        self.stats.add_vehicle(v)
+                    else:
+                        active.append(v)
+                    
+                    last_vehicle_pos = v.position
+                
+                self.vehicles = active
 
-                # We are Green
-                if self.vehicles:
-                    vehicle = self.vehicles.popleft()
-                    # Simulate passing
-                    vehicle.end_waiting_time = time.time()
-                    self.stats.add_vehicle(vehicle)
-                    # Time to pass intersection
-                    time.sleep(0.5) 
-                else:
-                    # No vehicles, just wait a bit to avoid busy spin
-                    time.sleep(0.1)
+            time.sleep(0.05)
 
     def stop(self):
-        with self.lock:
-            self.running = False
-            self.condition.notify_all()
+        self.running = False
 
 class ThreadedController(threading.Thread):
     def __init__(self, stats: TrafficStats):
@@ -63,9 +89,9 @@ class ThreadedController(threading.Thread):
             Direction.WEST: ThreadedTrafficLight(Direction.WEST, stats),
         }
         self.running = True
-        # Cycle configuration
-        self.green_duration = 5
+        self.green_duration = 4
         self.yellow_duration = 2
+        self.emergency_mode = False
 
     def start_lights(self):
         for light in self.lights.values():
@@ -78,41 +104,85 @@ class ThreadedController(threading.Thread):
 
     def run(self):
         self.start_lights()
-        # Initial State: NS Green, EW Red
-        cycle_state = 0 # 0: NS Green, 1: NS Yellow, 2: EW Green, 3: EW Yellow
+        cycle_state = 0 
         
         while self.running:
+            # 1. Check Emergency Override
+            emergency_dirs = []
+            for d, l in self.lights.items():
+                if l.has_emergency_waiting():
+                    emergency_dirs.append(d)
+            
+            if emergency_dirs:
+                self.emergency_mode = True
+                # Prioritize the first one found or all compatible?
+                # Simplify: Give Green to the direction of the first emergency found.
+                target_d = emergency_dirs[0]
+                
+                # Check compatible (Opposite is safe usually in real life, but here intersections cross)
+                # Standard: N & S are compatible. E & W are compatible.
+                compatible = []
+                if target_d in [Direction.NORTH, Direction.SOUTH]:
+                    compatible = [Direction.NORTH, Direction.SOUTH]
+                else:
+                    compatible = [Direction.EAST, Direction.WEST]
+                
+                # Force Green for compatible
+                others = [d for d in self.lights if d not in compatible]
+                
+                # Switch to Yellow then Red for others first if they are Green?
+                # For responsiveness, we force Red immediately on others and Green on Target.
+                # Or do safety transition? Prompt says "not stay stopped". Responsiveness > Realism here.
+                
+                self._set_lights(compatible, LightColor.GREEN)
+                self._set_lights(others, LightColor.RED)
+                
+                time.sleep(0.5) # Fast check loop during emergency
+                continue
+            
+            self.emergency_mode = False
+
+            # Normal Cycle
             if cycle_state == 0: # NS Green
                 self._set_lights([Direction.NORTH, Direction.SOUTH], LightColor.GREEN)
                 self._set_lights([Direction.EAST, Direction.WEST], LightColor.RED)
-                time.sleep(self.green_duration)
+                self._sleep_interruptible(self.green_duration)
                 cycle_state = 1
             elif cycle_state == 1: # NS Yellow
                 self._set_lights([Direction.NORTH, Direction.SOUTH], LightColor.YELLOW)
-                time.sleep(self.yellow_duration)
+                self._sleep_interruptible(self.yellow_duration)
                 cycle_state = 2
             elif cycle_state == 2: # EW Green
                 self._set_lights([Direction.NORTH, Direction.SOUTH], LightColor.RED)
                 self._set_lights([Direction.EAST, Direction.WEST], LightColor.GREEN)
-                time.sleep(self.green_duration)
+                self._sleep_interruptible(self.green_duration)
                 cycle_state = 3
             elif cycle_state == 3: # EW Yellow
                 self._set_lights([Direction.EAST, Direction.WEST], LightColor.YELLOW)
-                time.sleep(self.yellow_duration)
+                self._sleep_interruptible(self.yellow_duration)
                 cycle_state = 0
+
+    def _sleep_interruptible(self, duration):
+        # Sleep in small chunks to react to emergency
+        elapsed = 0
+        step = 0.5
+        while elapsed < duration and self.running:
+            # Check emergency
+            for l in self.lights.values():
+                if l.has_emergency_waiting():
+                    return # Exit sleep early to handle emergency loop
+            time.sleep(step)
+            elapsed += step
 
     def _set_lights(self, directions: list, color: LightColor):
         for d in directions:
             self.lights[d].set_color(color)
 
-    def add_vehicle(self, direction: Direction):
-        # Create a new vehicle and add to the specific light
-        v = Vehicle(id=str(random.randint(1000, 9999)), direction=direction, arrival_time=time.time())
+    def add_vehicle(self, direction: Direction, is_emergency: bool = False):
+        v = Vehicle(id=str(random.randint(1000, 9999)), direction=direction, arrival_time=time.time(), is_emergency=is_emergency)
         self.lights[direction].add_vehicle(v)
 
     def get_state(self):
-        # Return state in a format compatible with GUI (similar to ProcessController)
-        # return {Direction.VALUE: {'color': 'Red', 'vehicles': [v, ...]}, ...}
         state = {}
         for d, light in self.lights.items():
             with light.lock:
