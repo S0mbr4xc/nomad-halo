@@ -62,7 +62,6 @@ class ProcessTrafficLight(Process):
             v.position = next_pos
 
             if v.position >= self.end_pos:
-                # 🔁 MOVER A LA SIGUIENTE CALLE
                 next_dir = NEXT_DIRECTION[self.direction]
                 v.direction = next_dir
                 v.position = self.spawn_pos
@@ -105,7 +104,7 @@ class ProcessController:
             self.processes[d] = ProcessTrafficLight(d, child, self.shared_state, self.stats_queue)
 
         self.running = True
-        self.green_duration = 5
+        self.green_duration = 4
         self.yellow_duration = 2
 
     def start(self):
@@ -126,7 +125,12 @@ class ProcessController:
 
             if emergency:
                 target = emergency[0]
-                compatible = [Direction.NORTH, Direction.SOUTH] if target in [Direction.NORTH, Direction.SOUTH] else [Direction.EAST, Direction.WEST]
+                # SINCRONIZACIÓN: NORTE+SUR (horizontal) vs ESTE+OESTE (vertical)
+                if target in [Direction.NORTH, Direction.SOUTH]:
+                    compatible = [Direction.NORTH, Direction.SOUTH]
+                else:
+                    compatible = [Direction.EAST, Direction.WEST]
+                
                 others = [d for d in Direction if d not in compatible]
 
                 self._send(compatible, LightColor.GREEN)
@@ -134,21 +138,29 @@ class ProcessController:
                 time.sleep(0.5)
                 continue
 
+            # Normal Cycle - NORTE+SUR vs ESTE+OESTE
             if cycle == 0:
+                # Horizontal en VERDE
                 self._send([Direction.NORTH, Direction.SOUTH], LightColor.GREEN)
                 self._send([Direction.EAST, Direction.WEST], LightColor.RED)
                 time.sleep(self.green_duration)
                 cycle = 1
+                
             elif cycle == 1:
+                # Horizontal en AMARILLO
                 self._send([Direction.NORTH, Direction.SOUTH], LightColor.YELLOW)
                 time.sleep(self.yellow_duration)
                 cycle = 2
+                
             elif cycle == 2:
+                # Vertical en VERDE
                 self._send([Direction.EAST, Direction.WEST], LightColor.GREEN)
                 self._send([Direction.NORTH, Direction.SOUTH], LightColor.RED)
                 time.sleep(self.green_duration)
                 cycle = 3
+                
             elif cycle == 3:
+                # Vertical en AMARILLO
                 self._send([Direction.EAST, Direction.WEST], LightColor.YELLOW)
                 time.sleep(self.yellow_duration)
                 cycle = 0

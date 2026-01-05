@@ -4,6 +4,8 @@ import threading
 import time
 import random
 import math
+import psutil
+import os
 from .models import Direction, LightColor, TrafficStats, VehicleStatus
 from .core_threading import ThreadedController
 from .core_processes import ProcessController
@@ -285,21 +287,52 @@ class TrafficGUI:
                     
                     self.draw_detailed_car(px, py, d_enum, body, v.is_emergency)
 
+            # Stats - Información del sistema y vehículos activos
+            import psutil
+            import os
+            
+            # Información del sistema
+            cpu_percent = psutil.cpu_percent(interval=0)
+            memory = psutil.virtual_memory()
+            memory_used = memory.percent
+            
+            # Contar hilos/procesos activos
             if isinstance(self.controller, ProcessController):
-                while not self.controller.stats_queue.empty():
-                    val = self.controller.stats_queue.get()
-                    if not hasattr(self, 'local_stats_count'):
-                        self.local_stats_count = 0
-                        self.local_stats_wait = 0.0
-                    self.local_stats_count += 1
-                    self.local_stats_wait += val
-                if hasattr(self, 'local_stats_count') and self.local_stats_count > 0:
-                    avg = self.local_stats_wait / self.local_stats_count 
-                    self.lbl_stats.config(text=f"Vehículos: {self.local_stats_count}\nTiempo: {avg:.1f}s")
+                # Contar procesos activos
+                total_vehicles = 0
+                for d_val, info in state.items():
+                    total_vehicles += len(info.get('vehicles', []))
+                
+                # Contar procesos hijos
+                current_process = psutil.Process(os.getpid())
+                num_processes = len(current_process.children(recursive=True))
+                
+                stats_text = (
+                    f"=== MULTIPROCESSING ===\n"
+                    f"Vehículos: {total_vehicles}\n"
+                    f"Procesos: {num_processes}\n"
+                    f"CPU: {cpu_percent:.1f}%\n"
+                    f"RAM: {memory_used:.1f}%"
+                )
             else:
-                s = self.controller.stats
-                if s.total_vehicles > 0:
-                    self.lbl_stats.config(text=f"Vehículos: {s.total_vehicles}\nTiempo: {s.average_wait_time:.1f}s")
+                # Para threading
+                total_vehicles = 0
+                for d, light in self.controller.lights.items():
+                    with light.lock:
+                        total_vehicles += len(light.vehicles)
+                
+                # Contar hilos activos
+                num_threads = threading.active_count()
+                
+                stats_text = (
+                    f"=== THREADING ===\n"
+                    f"Vehículos: {total_vehicles}\n"
+                    f"Hilos: {num_threads}\n"
+                    f"CPU: {cpu_percent:.1f}%\n"
+                    f"RAM: {memory_used:.1f}%"
+                )
+            
+            self.lbl_stats.config(text=stats_text)
 
         except Exception as e:
             print(f"GUI Error: {e}")

@@ -120,9 +120,7 @@ class ThreadedController(threading.Thread):
                 self.emergency_mode = True
                 target = emergency[0]
                 
-                # SINCRONIZACIÓN CORRECTA:
-                # PAR 1 (HORIZONTAL): NORTE (María Arizaga →←) + SUR (Pío Bravo ←→)
-                # PAR 2 (VERTICAL): ESTE (Tarqui ↑) + OESTE (Juan Montalvo ↓)
+                # SINCRONIZACIÓN: NORTE+SUR (horizontal) vs ESTE+OESTE (vertical)
                 if target in [Direction.NORTH, Direction.SOUTH]:
                     compatible = [Direction.NORTH, Direction.SOUTH]
                 else:
@@ -139,31 +137,24 @@ class ThreadedController(threading.Thread):
             self.emergency_mode = False
 
             # Normal Cycle
-            # PAR 1 (HORIZONTAL): NORTE + SUR
-            # PAR 2 (VERTICAL): ESTE + OESTE
-            
             if cycle == 0:
-                # Horizontal en VERDE
                 self._set_lights([Direction.NORTH, Direction.SOUTH], LightColor.GREEN)
                 self._set_lights([Direction.EAST, Direction.WEST], LightColor.RED)
                 time.sleep(self.green_duration)
                 cycle = 1
                 
             elif cycle == 1:
-                # Horizontal en AMARILLO
                 self._set_lights([Direction.NORTH, Direction.SOUTH], LightColor.YELLOW)
                 time.sleep(self.yellow_duration)
                 cycle = 2
                 
             elif cycle == 2:
-                # Vertical en VERDE
                 self._set_lights([Direction.EAST, Direction.WEST], LightColor.GREEN)
                 self._set_lights([Direction.NORTH, Direction.SOUTH], LightColor.RED)
                 time.sleep(self.green_duration)
                 cycle = 3
                 
             elif cycle == 3:
-                # Vertical en AMARILLO
                 self._set_lights([Direction.EAST, Direction.WEST], LightColor.YELLOW)
                 time.sleep(self.yellow_duration)
                 cycle = 0
