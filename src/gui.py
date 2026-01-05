@@ -287,7 +287,7 @@ class TrafficGUI:
                     
                     self.draw_detailed_car(px, py, d_enum, body, v.is_emergency)
 
-            # Stats - Información del sistema y vehículos activos
+            # Stats - Información del sistema y vehículos completados
             import psutil
             import os
             
@@ -296,12 +296,22 @@ class TrafficGUI:
             memory = psutil.virtual_memory()
             memory_used = memory.percent
             
-            # Contar hilos/procesos activos
+            # Obtener ciclo actual
+            current_cycle = self.controller.get_current_cycle()
+            cycle_mod = (current_cycle % 10) + 1  # Ciclo 1-10
+            
+            # Obtener vehículos completados
+            completed = self.controller.get_completed_vehicles()
+            
+            # Contar vehículos activos POR DIRECCIÓN
+            total_active = 0
+            vehicles_by_dir = {}
+            
             if isinstance(self.controller, ProcessController):
-                # Contar procesos activos
-                total_vehicles = 0
                 for d_val, info in state.items():
-                    total_vehicles += len(info.get('vehicles', []))
+                    count = len(info.get('vehicles', []))
+                    vehicles_by_dir[d_val] = count
+                    total_active += count
                 
                 # Contar procesos hijos
                 current_process = psutil.Process(os.getpid())
@@ -309,27 +319,34 @@ class TrafficGUI:
                 
                 stats_text = (
                     f"=== MULTIPROCESSING ===\n"
-                    f"Vehículos: {total_vehicles}\n"
+                    f"Ciclo: {cycle_mod}/10\n"
+                    f"✅ Completados: {completed}\n"
+                    f"🚗 En Sistema: {total_active}\n"
+                    f"N:{vehicles_by_dir.get('North',0)} S:{vehicles_by_dir.get('South',0)} "
+                    f"E:{vehicles_by_dir.get('East',0)} O:{vehicles_by_dir.get('West',0)}\n"
                     f"Procesos: {num_processes}\n"
-                    f"CPU: {cpu_percent:.1f}%\n"
-                    f"RAM: {memory_used:.1f}%"
+                    f"CPU: {cpu_percent:.1f}% RAM: {memory_used:.1f}%"
                 )
             else:
                 # Para threading
-                total_vehicles = 0
                 for d, light in self.controller.lights.items():
                     with light.lock:
-                        total_vehicles += len(light.vehicles)
+                        count = len(light.vehicles)
+                        vehicles_by_dir[d.value] = count
+                        total_active += count
                 
                 # Contar hilos activos
                 num_threads = threading.active_count()
                 
                 stats_text = (
                     f"=== THREADING ===\n"
-                    f"Vehículos: {total_vehicles}\n"
+                    f"Ciclo: {cycle_mod}/10\n"
+                    f"✅ Completados: {completed}\n"
+                    f"🚗 En Sistema: {total_active}\n"
+                    f"N:{vehicles_by_dir.get('North',0)} S:{vehicles_by_dir.get('South',0)} "
+                    f"E:{vehicles_by_dir.get('East',0)} O:{vehicles_by_dir.get('West',0)}\n"
                     f"Hilos: {num_threads}\n"
-                    f"CPU: {cpu_percent:.1f}%\n"
-                    f"RAM: {memory_used:.1f}%"
+                    f"CPU: {cpu_percent:.1f}% RAM: {memory_used:.1f}%"
                 )
             
             self.lbl_stats.config(text=stats_text)
@@ -361,10 +378,36 @@ class TrafficGUI:
     def auto_traffic_loop(self):
         if not self.running or not self.auto_traffic_running: 
             return
-        d = random.choice(list(Direction))
-        is_amb = random.random() < 0.05
-        self.add_vehicle(d, is_amb)
-        self.root.after(random.randint(2000, 4000), self.auto_traffic_loop)
+        
+        # Obtener ciclo actual (1-10)
+        current_cycle = self.controller.get_current_cycle()
+        cycle_mod = (current_cycle % 10) + 1
+        
+        # REDUCIDO: Menos vehículos para evitar atascos
+        if cycle_mod <= 3:
+            # Ciclos 1-3: Tráfico ligero (1 vehículo)
+            num_vehicles = 1
+            interval = random.randint(4000, 6000)  # Más tiempo entre generaciones
+        elif cycle_mod <= 6:
+            # Ciclos 4-6: Tráfico medio (1-2 vehículos)
+            num_vehicles = random.randint(1, 2)
+            interval = random.randint(3000, 5000)
+        elif cycle_mod <= 8:
+            # Ciclos 7-8: Tráfico moderado (2 vehículos)
+            num_vehicles = 2
+            interval = random.randint(2500, 4000)
+        else:
+            # Ciclos 9-10: HORA PICO (2-3 vehículos)
+            num_vehicles = random.randint(2, 3)
+            interval = random.randint(2000, 3000)
+        
+        # Agregar vehículos
+        for _ in range(num_vehicles):
+            d = random.choice(list(Direction))
+            is_amb = random.random() < 0.03  # 3% ambulancias
+            self.add_vehicle(d, is_amb)
+        
+        self.root.after(interval, self.auto_traffic_loop)
 
     def generate_random_traffic(self):
         for _ in range(4):
