@@ -11,8 +11,8 @@ from .core_processes import ProcessController
 class TrafficGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Simulación de Tráfico - Lab 04 (Prioridad Ambulancia)")
-        self.root.geometry("1000x850") # Taller for more buttons
+        self.root.title("Simulación de Tráfico - Cuenca, Ecuador")
+        self.root.geometry("1000x850")
 
         self.controller = None
         self.mode = tk.StringVar(value="Thread")
@@ -20,12 +20,11 @@ class TrafficGUI:
         
         self.fps = 60
         self.animation_interval = int(1000/self.fps)
-        self.tick_counter = 0 # For blinking effects
+        self.tick_counter = 0
 
         self._init_ui()
 
     def _init_ui(self):
-        # Control Panel
         control_frame = ttk.LabelFrame(self.root, text="Configuración")
         control_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=10, pady=10)
 
@@ -41,7 +40,6 @@ class TrafficGUI:
 
         ttk.Separator(control_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
 
-        # Standard Vehicles
         ttk.Label(control_frame, text="Añadir Vehículo Normal").pack(pady=5)
         btn_frame = ttk.Frame(control_frame)
         btn_frame.pack(fill=tk.X)
@@ -52,8 +50,7 @@ class TrafficGUI:
 
         ttk.Separator(control_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
 
-        # Ambulance Controls
-        ttk.Label(control_frame, text="🚑 EMERGENCIA (AMBULANCIA)").pack(pady=5)
+        ttk.Label(control_frame, text="🚑 EMERGENCIA").pack(pady=5)
         amb_frame = ttk.Frame(control_frame)
         amb_frame.pack(fill=tk.X)
         ttk.Button(amb_frame, text="N", width=4, command=lambda: self.add_vehicle(Direction.NORTH, True)).grid(row=0, column=1)
@@ -81,34 +78,87 @@ class TrafficGUI:
         cx, cy = w // 2, h // 2
         self.cx, self.cy = cx, cy
         
-        rw = 140 # Road Width
+        rw = 100
         self.road_width = rw
         
-        self.canvas.create_rectangle(0,0, w, h, fill="#5B8C5A")
-        self.canvas.create_rectangle(cx - rw/2, 0, cx + rw/2, h, fill="#343837", outline="#888", width=1)
-        self.canvas.create_rectangle(0, cy - rw/2, w, cy + rw/2, fill="#343837", outline="#888", width=1)
-        self.canvas.create_rectangle(cx - rw/2, cy - rw/2, cx + rw/2, cy + rw/2, fill="#343837", outline="")
-        self.canvas.create_line(cx, 0, cx, cy - rw/2, fill="#F1C40F", width=2, dash=(20,20)) 
-        self.canvas.create_line(cx, cy + rw/2, cx, h, fill="#F1C40F", width=2, dash=(20,20)) 
-        self.canvas.create_line(0, cy, cx - rw/2, cy, fill="#F1C40F", width=2, dash=(20,20)) 
-        self.canvas.create_line(cx + rw/2, cy, w, cy, fill="#F1C40F", width=2, dash=(20,20)) 
-        self.canvas.create_line(cx - rw/2, cy - rw/2, cx, cy - rw/2, fill="white", width=6)
-        self.canvas.create_line(cx, cy + rw/2, cx + rw/2, cy + rw/2, fill="white", width=6)
-        self.canvas.create_line(cx - rw/2, cy, cx - rw/2, cy + rw/2, fill="white", width=6)
-        self.canvas.create_line(cx + rw/2, cy - rw/2, cx + rw/2, cy, fill="white", width=6)
+        mw = 400
+        mh = 300
+        self.manzana_width = mw
+        self.manzana_height = mh
+        
+        # Distancia de la línea de pare desde el borde de la manzana
+        self.stop_distance = 100
+        
+        self.canvas.create_rectangle(0, 0, w, h, fill="#5B8C5A")
+        
+        # Calles
+        self.canvas.create_rectangle(0, cy + mh // 2, w, cy + mh // 2 + rw, fill="#343837", outline="")
+        self.canvas.create_rectangle(0, cy - mh // 2 - rw, w, cy - mh // 2, fill="#343837", outline="")
+        self.canvas.create_rectangle(cx + mw // 2, 0, cx + mw // 2 + rw, h, fill="#343837", outline="")
+        self.canvas.create_rectangle(cx - mw // 2 - rw, 0, cx - mw // 2, h, fill="#343837", outline="")
+        
+        # Manzana
+        self.canvas.create_rectangle(cx - mw // 2, cy - mh // 2, cx + mw // 2, cy + mh // 2, fill="#475569", outline="#cbd5e1", width=3)
+        
+        # === LÍNEAS BLANCAS DE PARE (alejadas de la manzana) ===
+        # Cada línea está a stop_distance píxeles del borde de la manzana
+        # TODAS LAS LÍNEAS SON VERTICALES (perpendiculares al flujo)
+        
+        # NORTE (María Arizaga) - línea VERTICAL en calle superior
+        stop_x_north = cx + mw // 2 + self.stop_distance
+        self.canvas.create_line(
+            stop_x_north, cy - mh // 2 - rw // 2 - 30,
+            stop_x_north, cy - mh // 2 - rw // 2 + 30,
+            fill="white", width=6
+        )
+        
+        # SUR (Pío Bravo) - línea VERTICAL en calle inferior
+        stop_x_south = cx - mw // 2 - self.stop_distance
+        self.canvas.create_line(
+            stop_x_south, cy + mh // 2 + rw // 2 - 30,
+            stop_x_south, cy + mh // 2 + rw // 2 + 30,
+            fill="white", width=6
+        )
+        
+        # ESTE (Tarqui) - línea HORIZONTAL en calle derecha
+        stop_y_east = cy + mh // 2 + self.stop_distance
+        self.canvas.create_line(
+            cx + mw // 2 + rw // 2 - 30, stop_y_east,
+            cx + mw // 2 + rw // 2 + 30, stop_y_east,
+            fill="white", width=6
+        )
+        
+        # OESTE (Juan Montalvo) - línea HORIZONTAL en calle izquierda
+        stop_y_west = cy - mh // 2 - self.stop_distance
+        self.canvas.create_line(
+            cx - mw // 2 - rw // 2 - 30, stop_y_west,
+            cx - mw // 2 - rw // 2 + 30, stop_y_west,
+            fill="white", width=6
+        )
+        
+        # Líneas amarillas
+        self.canvas.create_line(0, cy + mh // 2 + rw // 2, w, cy + mh // 2 + rw // 2, fill="#F1C40F", width=2, dash=(20, 10))
+        self.canvas.create_line(0, cy - mh // 2 - rw // 2, w, cy - mh // 2 - rw // 2, fill="#F1C40F", width=2, dash=(20, 10))
+        self.canvas.create_line(cx + mw // 2 + rw // 2, 0, cx + mw // 2 + rw // 2, h, fill="#F1C40F", width=2, dash=(20, 10))
+        self.canvas.create_line(cx - mw // 2 - rw // 2, 0, cx - mw // 2 - rw // 2, h, fill="#F1C40F", width=2, dash=(20, 10))
+        
+        # Nombres
+        self.canvas.create_text(cx, cy + mh // 2 + rw + 15, text="Pío Bravo (S)", fill="white", font=("Arial", 12, "bold"))
+        self.canvas.create_text(cx, cy - mh // 2 - rw - 15, text="María Arizaga (N)", fill="white", font=("Arial", 12, "bold"))
+        self.canvas.create_text(cx + mw // 2 + rw + 50, cy, text="Tarqui (E)", fill="white", font=("Arial", 12, "bold"), angle=90)
+        self.canvas.create_text(cx - mw // 2 - rw - 60, cy, text="Juan Montalvo (O)", fill="white", font=("Arial", 12, "bold"), angle=90)
 
     def draw_detailed_car(self, x, y, direction, color_body, is_emergency=False):
-        s = 0.8
+        s = 0.7
         w, h = 40 * s, 24 * s 
         
         angle = 0
-        if direction == Direction.NORTH: angle = 90 
-        elif direction == Direction.SOUTH: angle = 270 
-        elif direction == Direction.EAST: angle = 180 
-        elif direction == Direction.WEST: angle = 0
+        if direction == Direction.NORTH: angle = 180
+        elif direction == Direction.SOUTH: angle = 0
+        elif direction == Direction.EAST: angle = 270
+        elif direction == Direction.WEST: angle = 90
 
-        # Draw rotated car body
-        self._draw_rotated_car(x, y, 40*s, 22*s, angle, color_body, is_emergency)
+        self._draw_rotated_car(x, y, w, h, angle, color_body, is_emergency)
 
     def _draw_rotated_car(self, cx, cy, w, h, angle, color, is_emergency):
         rad = math.radians(angle)
@@ -124,7 +174,6 @@ class TrafficGUI:
             transformed.append(ny)
         self.canvas.create_polygon(transformed, fill=color, outline="black")
         
-        # Windshield
         wx, wy = w * 0.2, h * 0.7
         sx = w * 0.1
         w_pts = [(sx + wx/2, -wy/2), (sx + wx/2, wy/2), (sx - wx/2, wy/2), (sx - wx/2, -wy/2)]
@@ -137,47 +186,41 @@ class TrafficGUI:
         self.canvas.create_polygon(t_w, fill="#87CEEB", outline="#555")
 
         if is_emergency:
-            # Draw Red Cross or just Siren
-            # Siren Bumper
-            blink = (self.tick_counter // 5) % 2 == 0 # Blink every 5 ticks
+            blink = (self.tick_counter // 5) % 2 == 0
             siren_color = "red" if blink else "blue"
-            
-            # Roof light
-            lx, ly = -5, 0 # Center roofish
+            lx, ly = -5, 0
             r = 4
             nx = lx * cos_a - ly * sin_a + cx
             ny = lx * sin_a + ly * cos_a + cy
             self.canvas.create_oval(nx-r, ny-r, nx+r, ny+r, fill=siren_color, outline="white")
-            
-            # Cross on roof maybe? Too small.
         else:
-            # Headlights
             hl_pts = [(w/2, -h/3), (w/2, h/3)]
             for px, py in hl_pts:
                 nx = px * cos_a - py * sin_a + cx
                 ny = px * sin_a + py * cos_a + cy
-                r = 3
+                r = 2
                 self.canvas.create_oval(nx-r, ny-r, nx+r, ny+r, fill="yellow", outline="orange")
 
     def update_loop(self):
-        if not self.running: return
+        if not self.running: 
+            return
 
         try:
             self.tick_counter += 1
             state = self.controller.get_state()
             self.draw_scene()
             
-            rw = self.road_width
             cx, cy = self.cx, self.cy
-            lane_offset = rw / 4
+            rw = self.road_width
+            mw, mh = self.manzana_width, self.manzana_height
+            stop_dist = self.stop_distance
             
-            # Draw Lights
-            l_offset = rw/2 + 20
+            # Semáforos
             l_info = [
-                (Direction.NORTH, cx - l_offset, cy - l_offset),
-                (Direction.SOUTH, cx + l_offset, cy + l_offset),
-                (Direction.EAST, cx + l_offset, cy - l_offset),
-                (Direction.WEST, cx - l_offset, cy + l_offset)
+                (Direction.NORTH, cx + mw // 2 + stop_dist + 30, cy - mh // 2 - 20),
+                (Direction.SOUTH, cx - mw // 2 - stop_dist - 30, cy + mh // 2 + 20),
+                (Direction.EAST, cx + mw // 2 + 20, cy + mh // 2 + stop_dist + 30),
+                (Direction.WEST, cx - mw // 2 - 20, cy - mh // 2 - stop_dist - 30)
             ]
             
             for d_enum, lx, ly in l_info:
@@ -196,15 +239,15 @@ class TrafficGUI:
                 self.canvas.create_oval(lx-6, ly-6, lx+6, ly+6, fill=curr_y)
                 self.canvas.create_oval(lx-6, ly+13, lx+6, ly+25, fill=curr_g)
 
-            # Draw Vehicles
+            # VEHÍCULOS - Mapeo corregido para que position=0 esté en la línea blanca
             for d_val, info in state.items():
                 vehicles = info.get('vehicles', [])
                 
                 color_map = {
-                    Direction.NORTH.value: "#3498DB",
+                    Direction.NORTH.value: "#FF9800",
                     Direction.SOUTH.value: "#E74C3C",
-                    Direction.EAST.value: "#2ECC71",
-                    Direction.WEST.value: "#F39C12"
+                    Direction.EAST.value: "#9B59B6",
+                    Direction.WEST.value: "#FFEB3B"
                 }
                 
                 d_enum = Direction(d_val)
@@ -215,32 +258,48 @@ class TrafficGUI:
                     body = "white" if v.is_emergency else body_color_std
                     
                     if d_enum == Direction.NORTH:
-                        px, py = cx - lane_offset, (cy - rw/2) + pos
+                        # María Arizaga (arriba, derecha → izquierda)
+                        py = cy - mh // 2 - rw // 2
+                        # position=0 debe estar en stop_x = cx + mw//2 + stop_dist
+                        # position=-400 debe estar a la derecha (spawn)
+                        # position=400 debe estar a la izquierda (exit)
+                        px = (cx + mw // 2 + stop_dist) - pos
+                        
                     elif d_enum == Direction.SOUTH:
-                        px, py = cx + lane_offset, (cy + rw/2) - pos
+                        # Pío Bravo (abajo, izquierda → derecha)
+                        py = cy + mh // 2 + rw // 2
+                        # position=0 debe estar en stop_x = cx - mw//2 - stop_dist
+                        px = (cx - mw // 2 - stop_dist) + pos
+                        
                     elif d_enum == Direction.EAST:
-                        px, py = (cx + rw/2) - pos, cy - lane_offset
+                        # Tarqui (derecha, abajo ↑ arriba)
+                        px = cx + mw // 2 + rw // 2
+                        # position=0 debe estar en stop_y = cy + mh//2 + stop_dist
+                        py = (cy + mh // 2 + stop_dist) - pos
+                        
                     elif d_enum == Direction.WEST:
-                        px, py = (cx - rw/2) + pos, cy + lane_offset
+                        # Juan Montalvo (izquierda, arriba ↓ abajo)
+                        px = cx - mw // 2 - rw // 2
+                        # position=0 debe estar en stop_y = cy - mh//2 - stop_dist
+                        py = (cy - mh // 2 - stop_dist) + pos
                     
                     self.draw_detailed_car(px, py, d_enum, body, v.is_emergency)
 
-            # Stats
             if isinstance(self.controller, ProcessController):
-                 while not self.controller.stats_queue.empty():
+                while not self.controller.stats_queue.empty():
                     val = self.controller.stats_queue.get()
                     if not hasattr(self, 'local_stats_count'):
                         self.local_stats_count = 0
                         self.local_stats_wait = 0.0
                     self.local_stats_count += 1
                     self.local_stats_wait += val
-                 if hasattr(self, 'local_stats_count') and self.local_stats_count > 0:
-                     avg = self.local_stats_wait / self.local_stats_count 
-                     self.lbl_stats.config(text=f"Vehículos Salidos: {self.local_stats_count}\nTiempo en Sistema: {avg:.1f}s")
+                if hasattr(self, 'local_stats_count') and self.local_stats_count > 0:
+                    avg = self.local_stats_wait / self.local_stats_count 
+                    self.lbl_stats.config(text=f"Vehículos: {self.local_stats_count}\nTiempo: {avg:.1f}s")
             else:
                 s = self.controller.stats
                 if s.total_vehicles > 0:
-                    self.lbl_stats.config(text=f"Vehículos Salidos: {s.total_vehicles}\nTiempo en Sistema: {s.average_wait_time:.1f}s")
+                    self.lbl_stats.config(text=f"Vehículos: {s.total_vehicles}\nTiempo: {s.average_wait_time:.1f}s")
 
         except Exception as e:
             print(f"GUI Error: {e}")
@@ -248,7 +307,8 @@ class TrafficGUI:
         self.root.after(self.animation_interval, self.update_loop)
 
     def start_simulation(self):
-        if self.running: return
+        if self.running: 
+            return
         mode = self.mode.get()
         self.stats = TrafficStats()
         if mode == "Thread":
@@ -266,20 +326,20 @@ class TrafficGUI:
         self.root.after(1000, self.auto_traffic_loop)
 
     def auto_traffic_loop(self):
-        if not self.running or not self.auto_traffic_running: return
+        if not self.running or not self.auto_traffic_running: 
+            return
         d = random.choice(list(Direction))
-        # 10% chance of ambulance if none active? Maybe just user controlled.
-        # Let's add slight chance of ambulance for fun
         is_amb = random.random() < 0.05
         self.add_vehicle(d, is_amb)
         self.root.after(random.randint(2000, 4000), self.auto_traffic_loop)
 
     def generate_random_traffic(self):
         for _ in range(4):
-             self.add_vehicle(random.choice(list(Direction)))
+            self.add_vehicle(random.choice(list(Direction)))
 
     def stop_simulation(self):
-        if not self.running: return
+        if not self.running: 
+            return
         self.auto_traffic_running = False
         self.controller.stop()
         self.running = False
