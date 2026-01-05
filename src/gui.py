@@ -309,9 +309,11 @@ class TrafficGUI:
             
             if isinstance(self.controller, ProcessController):
                 for d_val, info in state.items():
-                    count = len(info.get('vehicles', []))
-                    vehicles_by_dir[d_val] = count
-                    total_active += count
+                    # Filtrar solo direcciones válidas (ignorar 'completed_vehicles')
+                    if d_val in ['North', 'South', 'East', 'West']:
+                        count = len(info.get('vehicles', []))
+                        vehicles_by_dir[d_val] = count
+                        total_active += count
                 
                 # Contar procesos hijos
                 current_process = psutil.Process(os.getpid())

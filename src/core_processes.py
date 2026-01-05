@@ -178,7 +178,7 @@ class ProcessController:
         while self.running:
             emergency = [
                 Direction(k) for k, v in self.shared_state.items()
-                if v.get('has_emergency', False)
+                if k in ['North', 'South', 'East', 'West'] and v.get('has_emergency', False)
             ]
 
             if emergency:
@@ -262,7 +262,7 @@ class ProcessController:
             arrival_time=time.time(),
             is_emergency=is_emergency
         )
-        v.position = -200  # Ajustado para coincidir con spawn_pos
+        v.position = -200
         vehicles.append(v)
         data['vehicles'] = vehicles
         self.shared_state[direction.value] = data
@@ -280,4 +280,5 @@ class ProcessController:
                 'vehicles': list(v.get('vehicles', []))
             }
             for k, v in self.shared_state.items()
+            if k in ['North', 'South', 'East', 'West']
         }
